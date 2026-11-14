@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# Builds the native CLI on first use (or when sources change) and runs it.
+set -euo pipefail
+
+self="${BASH_SOURCE[0]}"
+while [[ -L "$self" ]]; do
+  target="$(readlink "$self")"
+  [[ "$target" == /* ]] || target="$(dirname "$self")/$target"
+  self="$target"
+done
+ROOT="$(cd "$(dirname "$self")" && pwd)"
+BIN="$ROOT/.build/flashlabel"
+
+needs_build=0
+if [[ ! -x "$BIN" ]]; then
+  needs_build=1
+elif [[ -n "$(find "$ROOT/Sources" "$ROOT/Resources" "$ROOT/flashlabel" -newer "$BIN" -print -quit)" ]]; then
+  needs_build=1
+fi
+
+if [[ "$needs_build" == 1 ]]; then
+  if ! command -v xcrun >/dev/null 2>&1; then
+    echo "flashlabel: Xcode Command Line Tools are required (xcode-select --install)" >&2
+    exit 1
+  fi
+  mkdir -p "$ROOT/.build"
+  echo "flashlabel: compiling (first run or sources changed)..." >&2
+  xcrun swiftc -O -swift-version 5 -parse-as-library \
+    -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker "$ROOT/Resources/Info.plist" \
+    "$ROOT"/Sources/Core/*.swift "$ROOT"/Sources/CLI/*.swift \
+    -o "$BIN.tmp"
+  mv "$BIN.tmp" "$BIN"
+fi
+
+exec "$BIN" "$@"
